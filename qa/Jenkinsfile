@@ -1,0 +1,32 @@
+pipeline {
+  agent {
+    node {
+      label 'maven'
+    }
+  }
+  options {
+    timeout(time: 20, unit: 'MINUTES')
+  }
+  stages {
+    stage('準本番環境へのデプロイ設定') {
+      when {
+        expression {
+          openshift.withCluster() {
+            openshift.withProject("qa-orval") {
+              return !openshift.selector('dc', 'orval').exists()
+            }
+          }
+        }
+      }
+      steps {
+        script {
+          openshift.withCluster() {
+            openshift.withProject("qa-shotodoke") {
+              openshift.newApp("shotodoke:latest", "--name=shotodoke").narrow('svc').expose()
+            }
+          }
+        }
+      }
+    }
+  }
+}

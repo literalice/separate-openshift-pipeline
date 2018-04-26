@@ -1,0 +1,79 @@
+def tag = "blue"
+def altTag = "green"
+def routeHost
+
+pipeline {
+  agent any
+  options {
+    timeout(time: 20, unit: 'MINUTES')
+  }
+  stages {
+    stage('本番環境へのデプロイ設定取得') {
+      steps {
+        script {
+          sh "oc get route orval -n prod-orval -o jsonpath='{ .spec.to.name }' --loglevel=4 > activeservice"
+          activeService = readFile('activeservice').trim()
+          if (activeService == "orval-blue") {
+            tag = "green"
+            altTag = "blue"
+          }
+          sh "oc get route ${tag}-orval -n prod-orval -o jsonpath='{ .spec.host }' --loglevel=4 > routehost"
+          routeHost = readFile('routehost').trim()
+        }
+      }
+    }
+    stage('本番環境へのデプロイ設定 Blue') {
+      when {
+        expression {
+          openshift.withCluster() {
+            openshift.withProject("prod-orval") {
+              return !openshift.selector('dc', 'orval-blue').exists()
+            }
+          }
+        }
+      }
+      steps {
+        script {
+          openshift.withCluster() {
+            openshift.withProject("prod-orval") {
+              openshift.newApp("orval:prod", "--name=orval-blue").narrow('svc').expose()
+            }
+          }
+        }
+      }
+    }
+    stage('本番環境へのデプロイ設定 Green') {
+      when {
+        expression {
+          openshift.withCluster() {
+            openshift.withProject("prod-orval") {
+              return !openshift.selector('dc', 'orval-green').exists()
+            }
+          }
+        }
+      }
+      steps {
+        script {
+          openshift.withCluster() {
+            openshift.withProject("prod-orval") {
+              openshift.newApp("orval:prod", "--name=orval-green").narrow('svc').expose()
+            }
+          }
+        }
+      }
+    }
+    stage('本番環境へのデプロイ') {
+      steps {
+        openshiftDeploy depCfg: "orval-${tag}"
+      }
+    }
+    stage('本番環境へのリリース') {
+      steps {
+        input message: "Test deployment: http://${routeHost}. Approve?", id: "approval"
+        script {
+          sh "oc set -n prod-orval route-backends orval orval-${tag}=100 orval-${altTag}=0 --loglevel=4"
+        }
+      }
+    }
+  }
+}
