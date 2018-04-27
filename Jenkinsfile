@@ -70,8 +70,8 @@ pipeline {
       steps {
         script {
           openshift.withCluster() {
-            openshift.withProject("development-shotodoke") {
-              openshift.newApp("shotodoke:latest", "--name=shotodoke").narrow('svc').expose()
+            openshift.withProject("development-orval") {
+              openshift.newApp("orval:latest", "--name=orval").narrow('svc').expose()
             }
           }
         }
